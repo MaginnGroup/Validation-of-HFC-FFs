@@ -1,0 +1,31 @@
+#! Vibrational and thermo analysis of r125.
+memory 2000 mb
+
+molecule c2hf5 {
+
+  C     3.68000   -1.66200   -0.05900
+  C     2.14400   -1.54100   -0.00000
+  H     4.03100   -1.65100   -1.09300
+  F     4.23200   -0.62700    0.61800
+  F     4.05500   -2.82100    0.53500
+  F     1.76000   -0.39400   -0.58700
+  F     1.69100   -1.55200    1.25600
+  F     1.58600   -2.56300   -0.67000
+
+}
+
+set basis 6-31G**
+
+energy('mp2')
+
+optimize('mp2', molecule=c2hf5)
+
+set t 273.15
+
+e, wfn = freq('mp2', molecule=c2hf5, return_wfn=True)
+entropy = 1000 * psi_hartree2kcalmol * (variable('enthalpy correction') - variable('gibbs free energy correction')) / get_global_option('t')
+
+
+set hessian_write on
+vibanal_wfn(wfn)
+entropy = 1000 * psi_hartree2kcalmol * (variable('enthalpy correction') - variable('gibbs free energy correction')) / get_global_option('t')

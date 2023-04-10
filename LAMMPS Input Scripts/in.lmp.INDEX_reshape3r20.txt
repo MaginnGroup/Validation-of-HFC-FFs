@@ -1,0 +1,116 @@
+# LAMMPS input script for reshape3r20 of DIR_INDEX
+
+variable        NAME index DIR_INDEX_reshape_3r20
+log             ${NAME}.log
+variable        infile index restart_DIR_INDEX_final_edit.data
+
+
+units		    real
+atom_style	    full
+boundary        p p p
+pair_style	    lj/cut/coul/long 12.0
+bond_style      harmonic
+angle_style     harmonic
+#dihedral_style  charmm
+#improper_style  cvff
+kspace_style    ewald 0.0001
+pair_modify     tail yes
+pair_modify     mix arithmetic
+
+variable    simulationTemp  equal   TEMP_INDEX
+#variable  pressure_     equal 0.987*PRESS_INDEX                # pressure in bars to atm
+
+
+read_data	    ${infile}
+
+
+neighbor	    2.0 bin
+neigh_modify    delay 0 every 1 check yes
+
+thermo_style	custom step temp pe etotal press vol density
+thermo		    1000
+
+
+velocity	all scale ${simulationTemp}
+velocity    all zero linear units box
+velocity    all zero angular units box
+
+# >>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>> NVT init for Reshape <<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<
+
+variable    NVT_init        equal   500000
+variable    NVE_reshape     equal   100000
+variable    NVT_run_2       equal   5400000
+variable    NVE_cuboid      equal   4000000
+
+
+fix             NVT_1 all nvt temp ${simulationTemp} ${simulationTemp} 100
+
+thermo_style    custom step cpu cpuremain vol temp press ke pe etotal density
+thermo          1000
+
+#dump           DUMP_1 all custom 100000 ${NAME}.lammpstrj_1 id type x y z mol
+
+run             ${NVT_init}
+
+unfix           NVT_1
+
+# >>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>> NVE reshape run <<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<
+
+fix		        NVE_1 all nve
+
+variable       ulcubed equal vol/180
+variable       unit_length equal ${ulcubed}^0.33333333
+variable       new_x_length equal 3*v_unit_length
+variable       new_y_length equal 3*v_unit_length
+variable       new_z_length equal 20*v_unit_length
+
+
+
+fix             reshape_2 all deform 1 x final 0.0 ${new_x_length} y final 0.0 ${new_x_length} &
+                                      z final 0.0 ${new_z_length} units box
+
+
+thermo_style    custom step cpu cpuremain vol temp press ke pe etotal density
+thermo          1000
+
+#dump            DUMP_2 all custom 100000 ${NAME}.lammpstrj_2 id type x y z mol
+
+run              ${NVE_reshape}
+
+unfix            reshape_2
+
+unfix            NVE_1
+
+velocity	all scale ${simulationTemp}
+velocity    all zero linear units box
+velocity    all zero angular units box
+
+# >>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>  NVT_init <<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<
+
+fix             NVT_2 all nvt temp ${simulationTemp} ${simulationTemp} 100
+
+thermo_style    custom step cpu cpuremain vol temp press ke pe etotal density
+thermo          1000
+
+#dump           DUMP_3 all custom 100000 ${NAME}.lammpstrj_3 id type x y z mol
+
+run             ${NVT_run_2}
+
+unfix           NVT_2
+
+# >>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>> NVE cuboid equilibration run <<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<
+
+fix		        NVE_2 all nve
+
+thermo_style    custom step cpu cpuremain vol temp press ke pe etotal density
+thermo          1000
+
+#dump           DUMP_4 all custom 100000 ${NAME}.lammpstrj_4 id type x y z mol
+
+run             ${NVE_cuboid}
+
+restart         1000000 restart_${NAME}.1 restart_${NAME}.2
+
+write_data      restart_${NAME}_cuboid.data
+
+#unfix           NVE_2

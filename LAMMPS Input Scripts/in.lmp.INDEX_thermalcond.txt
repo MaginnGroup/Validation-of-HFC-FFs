@@ -1,0 +1,119 @@
+# LAMMPS input script for thermalcond of DIR_INDEX
+
+variable        NAME index DIR_INDEX_thermalcond
+log             ${NAME}.log
+variable        infile index restart_DIR_INDEX_reshape_3r20_cuboid.data
+
+
+units		        real
+atom_style	    full
+boundary        p p p
+pair_style	    lj/cut/coul/long 12.0
+bond_style      harmonic
+angle_style     harmonic
+#dihedral_style  charmm
+#improper_style  cvff
+kspace_style    ewald 0.0001
+pair_modify     tail yes
+pair_modify     mix arithmetic
+
+#variable    simulationTemp  equal   TEMP_INDEX
+#variable  pressure_     equal 0.987*PRESS_INDEX                # pressure in bars to atm
+
+
+read_data	    ${infile}
+
+
+neighbor	    2.0 bin
+neigh_modify    delay 0 every 1 check yes
+
+thermo_style	custom step temp pe etotal press vol density
+thermo		    1000
+
+
+# >>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>> fix_ehex_init <<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<
+
+# >>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>> thermal conductivity calculation <<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<
+
+# ehex layers
+
+fix             NVE_3 all nve
+
+variable r index  15000000
+variable a index  0.0025
+variable    kappa_calc_run       equal   $r
+variable    kb index 0.0019872067        # kB in Kcal/mole/K
+variable    unit_length equal lx/3
+variable    low_cold equal ${unit_length}*9
+variable    hi_cold  equal ${unit_length}*11
+variable    lo_hot2  equal ${unit_length}*19
+variable    hi_hot2  equal ${unit_length}*20
+
+
+region          hot1 block INF INF INF INF 0.0 ${unit_length} #9.644890869556686
+region          cold1 block  INF INF INF INF ${low_cold} ${hi_cold}
+region          hot2 block  INF INF INF INF ${lo_hot2} ${hi_hot2}
+
+
+
+compute         Thot1 all temp/region hot1
+compute         Tcold1 all temp/region cold1
+compute         Thot2 all temp/region hot2
+
+
+fix             hot1 all ehex 1  0.0025 region hot1
+fix             cold1 all ehex 1 -0.005 region cold1
+fix             hot2 all ehex 1  0.0025 region hot2
+
+
+thermo_style    custom step temp press ke pe etotal density c_Thot1 c_Tcold1 c_Thot2
+thermo          1000
+
+
+compute		    ke all ke/atom
+variable	    temp atom c_ke/(1.5*${kb})
+
+
+
+compute         temp_layers all chunk/atom bin/1d z lower 0.05 units reduced
+fix		        temp_profile all ave/chunk 10 100 1000 temp_layers v_temp file temp_profile.${NAME}.$a
+
+compute         lammps_temp_layers all chunk/atom bin/1d z lower 0.05 units reduced
+fix		        lammps_temp_profile all ave/chunk 10 100 1000 lammps_temp_layers temp file lammps_temp_profile.${NAME}.$a
+
+compute         dens_layers all chunk/atom bin/1d z lower 0.05 units reduced
+fix		        dens_profile all ave/chunk 10 100 1000 dens_layers density/mass file massdens_profile.${NAME}.$a
+
+compute         numdens_layers all chunk/atom bin/1d z lower 0.05 units reduced
+fix		        numdens_profile all ave/chunk 10 100 1000 numdens_layers density/number file numdens_profile.${NAME}.$a
+
+
+
+variable       t       equal step
+variable       T       equal temp
+variable       V       equal vol
+variable       P       equal press
+variable       PotEng  equal pe
+variable       KinEng  equal ke
+variable       TotEng  equal etotal
+variable       Density_ equal density
+variable       xl       equal lx
+variable       yl       equal ly
+variable       zl       equal lz
+
+
+print           "Step Temp Volume Pressure PotEng KinEng TotEng Density x_length y_length z_length" file thermalsim.${NAME}.txt
+fix             PRINT all print 2000 "$t $T $V $P $(v_PotEng) $(v_KinEng) $(v_TotEng) $(v_Density_) $(v_xl) $(v_yl) $(v_zl)" &
+                append thermalsim.${NAME}.txt title ""
+
+
+
+#dump           DUMP_5 all custom 1000000 ${NAME}.lammpstrj_5 id type x y z mol
+
+restart         1000000 restart_${NAME}.1 restart_${NAME}.2
+
+run             ${kappa_calc_run}
+
+write_data      restart.${NAME}.final.data
+
+run 10

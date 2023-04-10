@@ -1,0 +1,136 @@
+# LAMMPS input script for NVT_Cv of DIR_INDEX
+
+variable        NAME index DIR_INDEX_NVT_constrho
+log             ${NAME}.log
+variable        infile index restart_DIR_INDEX_edit.data
+
+
+units		        real
+atom_style	    full
+boundary        p p p
+pair_style	    lj/cut/coul/long 12.0
+bond_style      harmonic
+angle_style     harmonic
+#dihedral_style  charmm
+#improper_style  cvff
+kspace_style    ewald 0.0001
+pair_modify     tail yes
+pair_modify     mix arithmetic
+
+variable    simulationTemp  equal   TEMP_INDEX
+variable  pressure_     equal 0.987*300                # pressure in bars to atm
+
+
+
+read_data	    ${infile}
+
+
+neighbor	      2.0 bin
+neigh_modify    delay 0 every 1 check yes
+
+
+velocity	    all create ${simulationTemp} 886874 mom yes rot yes dist gaussian
+
+
+variable        dumpfreq   index 50000
+variable        dumpfreq_2   index 20000
+variable        thermofreq index 1000
+variable        printfreq  index 1000
+variable        restartfreq index 1000000
+
+variable        NVT_run       equal     20000000
+variable        NPT_reshape   equal     3000000
+variable        deform_time   equal     100000       
+
+
+# >>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>> NPT to aid reshaping to desired density <<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<
+
+
+fix	       npt_1    all npt temp ${simulationTemp} ${simulationTemp} 100 iso ${pressure_} ${pressure_} 1000
+
+thermo_style    custom step cpu cpuremain vol temp press ke pe etotal density
+thermo          1000
+
+run		        ${NPT_reshape}
+
+unfix            npt_1
+
+
+fix             reshape_1 all deform 1 x final 0.0 desired_boxlength y final 0.0 desired_boxlength &
+                                      z final 0.0 desired_boxlength units box
+
+
+thermo_style    custom step cpu cpuremain vol temp press ke pe etotal density
+thermo          1000
+
+
+
+run              ${deform_time}
+
+unfix            reshape_1
+
+
+velocity	  all scale ${simulationTemp}
+velocity    all zero linear units box
+velocity    all zero angular units box
+
+
+
+# >>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>> NVT run for Cv <<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<
+
+
+
+fix             NVT_1 all nvt temp ${simulationTemp} ${simulationTemp} 100
+
+
+compute         in_out_pair  all pe/mol/tally all
+
+
+thermo_style     custom step vol temp press density pe ke etotal enthalpy &
+                 ecoul evdwl elong emol epair ebond eangle edihed eimp etail xy xz yz &
+                 c_in_out_pair[1] c_in_out_pair[2] c_in_out_pair[3] c_in_out_pair[4]
+thermo           ${thermofreq}
+
+
+# Defining properties to output
+variable    step                                equal step
+variable    volume                              equal vol
+variable    density                             equal density
+variable    temp                                equal temp
+variable    press                               equal press
+variable    ke                                  equal ke
+variable    pe                                  equal pe
+variable    etotal                              equal etotal
+variable    enthalpy                            equal enthalpy
+variable    energy_coulumbic                    equal ecoul
+variable    energy_Vdwl                         equal evdwl
+variable    energy_long                         equal elong
+variable    energy_intramolecular               equal emol
+variable    energy_pair                         equal epair
+variable    energy_intra_Vdwl                   equal c_in_out_pair[1]
+variable    energy_intra_coul                   equal c_in_out_pair[2]
+variable    energy_inter_Vdwl                   equal c_in_out_pair[3]
+variable    energy_inter_coul                   equal c_in_out_pair[4]
+
+
+
+print   "Step V Dens T P KE PE U H Ecoul Evdwl Elong Emol Epair Evdwl_intra Ecoul_intra Evdwl_inter Ecoul_inter" &
+         file Output_${NAME}.txt
+fix     PRINT_results all print ${printfreq} "$(v_step) $(v_volume) $(v_density) $(v_temp) $(v_press) &
+         $(v_ke) $(v_pe) $(v_etotal) $(v_enthalpy) $(v_energy_coulumbic) $(v_energy_Vdwl) $(v_energy_long) &
+         $(v_energy_intramolecular) $(v_energy_pair) $(v_energy_intra_Vdwl) $(v_energy_intra_coul) &
+         $(v_energy_inter_Vdwl) $(v_energy_inter_coul)" append Output_${NAME}.txt title ""
+
+
+
+#dump            DUMP_file all custom ${dumpfreq} ${NAME}.lammpstrj_1 id type x y z xu yu zu vx vy vz mol
+restart         ${restartfreq} restart_${NAME}.1 restart_${NAME}.2
+run             ${NVT_run}
+write_data      restart_${NAME}_final.data
+unfix           PRINT_results
+unfix           NVT_1
+#undump          DUMP_file 
+
+
+
+

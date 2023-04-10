@@ -1,0 +1,239 @@
+# LAMMPS input script for Bridgman calculations for DIR_INDEX
+# settings
+
+
+variable        NAME index DIR_INDEX
+log             ${NAME}.log
+variable        infile index DATA_INDEX.data
+
+
+units		    real
+atom_style	    full
+boundary        p p p
+pair_style	    lj/cut/coul/long 12.0
+bond_style      harmonic
+angle_style     harmonic
+#dihedral_style  charmm
+#improper_style  cvff
+kspace_style    ewald 0.0001
+pair_modify     tail yes
+pair_modify     mix arithmetic
+
+
+
+
+
+variable press_neg30P equal    2.714131          #
+variable press_neg15P equal    4.88575581  
+variable press_zeroP  equal    8.13966645                             
+variable press_25P    equal    16.90142294
+variable press_40P    equal    24.79134
+variable press_55P    equal    35.21360
+
+
+
+
+variable   simulationTemp equal TEMP_INDEX
+variable   pressure_      equal 0.987*50*${PRESS_INDEX}
+variable   pressure_1     equal 0.987*5*${PRESS_INDEX}
+variable   pressure_2     equal 0.987*3*${PRESS_INDEX}
+variable   pressure_3     equal 0.987*1.5*${PRESS_INDEX}
+variable   pressure_4     equal 0.987*${PRESS_INDEX}
+
+
+variable  annealTemp index 348.15
+variable  relaxTemp  index 248.15
+variable  annealSteps equal 100000
+variable  relaxSteps  equal 400000
+variable  annealtimestep equal 1.0
+variable  relaxtimestep equal  1.0
+
+
+variable  init_equilibration_step equal 1000000
+
+variable  npt_run equal 15000000
+
+
+
+read_data	    ${infile}
+
+minimize        1e-4 1e-6 10000 100000
+
+velocity	    all create ${simulationTemp} 886874 mom yes rot yes dist gaussian
+
+
+neighbor	    2.0 bin
+neigh_modify    delay 0 every 2 check yes
+
+
+thermo_style	custom step temp pe etotal press vol density
+thermo		    1000
+
+
+# >>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>> Speed_Testing then Annealing <<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<
+
+timestep	    ${annealtimestep}
+fix	    test       all npt temp ${annealTemp} ${annealTemp} 100.0 iso ${pressure_} ${pressure_} 1000
+run		         ${annealSteps}
+unfix   test
+print            "Test complete" file Test.txt
+
+
+timestep	    ${relaxtimestep}
+fix	    2       all npt temp ${relaxTemp} ${relaxTemp} 100.0 iso ${pressure_} ${pressure_} 1000
+run		        ${relaxSteps}
+unfix   2
+
+timestep	    ${annealtimestep}
+fix	    3       all npt temp ${annealTemp} ${annealTemp} 100.0 iso ${pressure_} ${pressure_} 1000
+run		        ${annealSteps}
+unfix   3
+
+timestep	    ${relaxtimestep}
+fix	    4       all npt temp ${relaxTemp} ${relaxTemp} 100.0 iso ${pressure_} ${pressure_} 1000
+run		        ${relaxSteps}
+unfix   4
+
+minimize        1e-4 1e-6 10000 100000
+
+
+velocity	    all scale ${simulationTemp}
+velocity        all zero linear units box
+velocity        all zero angular units box
+
+
+write_data      restart_${NAME}_anneal.data
+
+
+# ############### first equilibration ________________________________________________
+
+timestep   1.0
+
+fix	       npt1    all npt temp ${simulationTemp} ${simulationTemp} 100.0 iso ${pressure_1} ${pressure_1} 1000
+
+
+thermo_style    custom step vol temp press pe ke density
+thermo          1000
+
+
+run              ${init_equilibration_step}
+unfix            npt1
+
+
+
+
+# ############### second equilibration ________________________________________________
+
+
+
+fix	       npt2    all npt temp ${simulationTemp} ${simulationTemp} 100.0 iso ${pressure_2} ${pressure_2} 1000
+
+
+thermo_style    custom step vol temp press pe ke density
+thermo          1000
+
+
+run              ${init_equilibration_step}
+unfix            npt2
+
+
+
+
+
+# ############### third equilibration ________________________________________________
+
+
+
+fix	       npt3    all npt temp ${simulationTemp} ${simulationTemp} 100.0 iso ${pressure_3} ${pressure_3} 1000
+
+
+thermo_style    custom step vol temp press pe ke density
+thermo          1000
+
+
+run              ${init_equilibration_step}
+unfix            npt3
+
+
+
+
+
+
+# ############### fourth equilibration ________________________________________________
+
+
+fix	       npt4    all npt temp ${simulationTemp} ${simulationTemp} 100.0 iso ${pressure_4} ${pressure_4} 1000
+
+
+thermo_style    custom step vol temp press pe ke density
+thermo          1000
+
+
+run              ${init_equilibration_step}
+unfix            npt4
+
+write_data      restart_${NAME}_initequilibration.data
+
+
+
+
+# >>>>>>>>>>>>> npt for Bridgman Calculations <<<<<<<<<<<<<<<<<<<<<<<
+
+variable        dumpfreq   index 1000
+variable        thermofreq index 1000
+variable        printfreq  index 1000
+variable        restartfreq index 1000000
+
+
+print            'Bridgman Calculations Begin'
+
+
+fix	             npt_Bridgman    all npt temp ${simulationTemp} ${simulationTemp} 100.0 iso ${pressure_4} ${pressure_4} 1000   
+
+
+compute         in_out_pair  all pe/mol/tally all
+
+
+thermo_style     custom step vol temp press density pe ke etotal enthalpy &
+                 ecoul evdwl elong emol epair ebond eangle edihed eimp etail xy xz yz &
+                 c_in_out_pair[1] c_in_out_pair[2] c_in_out_pair[3] c_in_out_pair[4]
+thermo           ${thermofreq}
+
+
+# Defining properties to output
+variable    step                                equal step
+variable    volume                              equal vol
+variable    density                             equal density
+variable    temp                                equal temp
+variable    press                               equal press
+variable    ke                                  equal ke
+variable    pe                                  equal pe
+variable    etotal                              equal etotal
+variable    enthalpy                            equal enthalpy
+variable    energy_coulumbic                    equal ecoul
+variable    energy_Vdwl                         equal evdwl
+variable    energy_long                         equal elong
+variable    energy_intramolecular               equal emol
+variable    energy_pair                         equal epair
+variable    energy_intra_Vdwl                   equal c_in_out_pair[1]
+variable    energy_intra_coul                   equal c_in_out_pair[2]
+variable    energy_inter_Vdwl                   equal c_in_out_pair[3]
+variable    energy_inter_coul                   equal c_in_out_pair[4]
+
+
+
+print   "Step V Dens T P KE PE U H Ecoul Evdwl Elong Emol Epair Evdwl_intra Ecoul_intra Evdwl_inter Ecoul_inter" &
+         file Output_${NAME}.txt
+fix     PRINT_results all print ${printfreq} "$(v_step) $(v_volume) $(v_density) $(v_temp) $(v_press) &
+         $(v_ke) $(v_pe) $(v_etotal) $(v_enthalpy) $(v_energy_coulumbic) $(v_energy_Vdwl) $(v_energy_long) &
+         $(v_energy_intramolecular) $(v_energy_pair) $(v_energy_intra_Vdwl) $(v_energy_intra_coul) &
+         $(v_energy_inter_Vdwl) $(v_energy_inter_coul)" append Output_${NAME}.txt title ""
+
+
+#dump            DUMP_file all custom ${dumpfreq} ${NAME}.lammpstrj id type x y z xu yu zu vx vy vz mol
+
+restart         ${restartfreq} restart_${NAME}.1 restart_${NAME}.2
+
+run             ${npt_run}
+
+write_data      restart_${NAME}_final.data

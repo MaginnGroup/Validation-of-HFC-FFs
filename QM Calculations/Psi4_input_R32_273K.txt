@@ -1,0 +1,29 @@
+#! Vibrational and thermo analysis of r32.
+memory 2000 mb
+
+molecule ch2f2 {
+
+  C   -0.88400    2.63800   -0.06500
+  H   -1.22900    3.61000   -0.42200
+  H   -1.22900    1.79900   -0.67400
+  F    0.48200    2.63600   -0.05400
+  F   -1.32900    2.46000    1.21400
+
+}
+
+set basis 6-31G**
+
+energy('mp2')
+
+optimize('mp2', molecule=ch2f2)
+
+set t 273.15
+
+e, wfn = freq('mp2', molecule=ch2f2, return_wfn=True)
+entropy = 1000 * psi_hartree2kcalmol * (variable('enthalpy correction') - variable('gibbs free energy correction')) / get_global_option('t')
+
+
+set hessian_write on
+vibanal_wfn(wfn)
+entropy = 1000 * psi_hartree2kcalmol * (variable('enthalpy correction') - variable('gibbs free energy correction')) / get_global_option('t')
+

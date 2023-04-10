@@ -1,0 +1,83 @@
+# LAMMPS input script for viscosity of DIR_INDEX
+
+variable        NAME index DIR_INDEX_viscosity
+log             ${NAME}.log
+variable        infile index restart_DIR_INDEX_reshape_3r20_cuboid.data
+
+
+units		    real
+atom_style	    full
+boundary        p p p
+pair_style	    lj/cut/coul/long 12.0
+bond_style      harmonic
+angle_style     harmonic
+#dihedral_style  charmm
+#improper_style  cvff
+kspace_style    ewald 0.0001
+pair_modify     tail yes
+pair_modify     mix arithmetic
+
+#variable    simulationTemp  equal   TEMP_INDEX
+#variable  pressure_     equal 0.987*PRESS_INDEX                # pressure in bars to atm
+
+
+read_data	    ${infile}
+
+
+neighbor	    2.0 bin
+neigh_modify    delay 0 every 1 check yes
+
+thermo_style	custom step temp pe etotal press vol density
+thermo		    1000
+
+# >>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>> fix_viscosity <<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<
+
+# >>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>> viscosity calculation <<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<
+
+# visco layers
+
+fix             NVE_3 all nve
+
+variable r index  15000000
+variable    visco_calc_run       equal   $r
+variable    unit_length equal lx/3
+
+
+fix             visco all viscosity 400 x z 20
+
+
+compute         visco_layers all chunk/atom bin/1d z lower 0.05 units reduced
+fix             velocity_profile all ave/chunk 10 100 1000 visco_layers vx file velocity_profile.${NAME}.profile
+
+thermo_style    custom step cpu cpuremain vol temp press ke pe etotal density
+thermo          2000
+
+
+variable       t       equal step
+variable       T       equal temp
+variable       V       equal vol
+variable       P       equal press
+variable       PotEng  equal pe
+variable       KinEng  equal ke
+variable       TotEng  equal etotal
+variable       Density_ equal density
+variable       xl       equal lx
+variable       yl       equal ly
+variable       zl       equal lz
+variable       mom_tot equal f_visco
+
+
+
+
+print           "Step Temp Volume Pressure PotEng KinEng TotEng Density x_length y_length z_length Total_momentum" file momentumflux.${NAME}.txt
+fix             PRINT all print 2000 "$t $T $V $P $(v_PotEng) $(v_KinEng) $(v_TotEng) $(v_Density_) $(v_xl) $(v_yl) $(v_zl) $(v_mom_tot)" &
+                append momentumflux.${NAME}.txt title ""
+
+
+restart         1000000 restart_${NAME}.1 restart_${NAME}.2
+
+run             ${visco_calc_run}
+
+write_data      restart.${NAME}.final.data
+
+run 10
