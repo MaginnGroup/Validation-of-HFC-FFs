@@ -14,7 +14,7 @@ Also, all mention or references to v52, v37, v36 and v23 for R32 are to be under
 respectively as used in the paper for this work. v100, v80, v74 and v7 represent versions a, b, c and d 
 respectively for R125. 
 
-All files ending with the .data extension are simply FF data files for NPT simulations in LAMMPS. 
+All files ending with the .data extension are simply FF data input files for simulations in LAMMPS. 
 
 Using these example scripts for the large number of simulations performed requires some automation scripts 
 which can be written using Bash scripting. Those Bash scripts used for job submission automation are not included here.
